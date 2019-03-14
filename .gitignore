@@ -1,0 +1,8 @@
+.vscode/*
+keys/*
+
+# python
+*.pyc
+
+# proto generated classes
+py/mapqueue/Schema_pb2.py
