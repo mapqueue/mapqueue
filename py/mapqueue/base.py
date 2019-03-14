@@ -1,6 +1,7 @@
 # Interfaces for Map and Queue
 from collections import namedtuple
 from datetime import datetime, timezone
+import pickle
 from typing import Optional
 from uuid import uuid4, UUID
 from zlib import compress, decompress
@@ -68,11 +69,12 @@ def now() -> int:
     """return current time as milliseconds since the unix epoch"""
     return dt_millis(datetime.now(timezone.utc))
 
-
 def str_key(s: str) -> Key:
     """convert string to Key"""
     return Key(uuid=s[:32], time=s[32:45], kind=s[45:])
 
+def get_or_now(time: Optional[int]) -> int:
+    return now() if time is None else time
 
 class Context(object):
     """base class for append only map or queue"""
@@ -101,47 +103,39 @@ class Context(object):
 class Map(Context):
     """key/value storage where put appends values as new versions and get retrieves the latest value"""
 
-    def _get(self, key: Key) -> Optional[bytes]:
-        """get returns the latest value that was valid at the time specified otherwise None"""
+    def _get(self, uuid: UUID, time: int) -> Optional[bytes]:
+        """_get retrieves the compressed value for the key"""
         raise NotImplementedError(
-            'get must return the latest value that was valid at the time specified otherwise None')
+            '_get retrieves the compressed value for the key')
 
     def _put(self, key: Key, value: bytes) -> Key:
-        """put stores value into map for given kind, uuid and time"""
+        """_put stores the compressed value for the key"""
         raise NotImplementedError(
-            'put must store value into map for given kind, uuid and time')
+            '_put stores the compressed value for the key')
 
-    def get(self, key: Key) -> Optional[bytes]:
-        """get returns the latest value that was valid at the time specified otherwise None"""
-        value = self._get(key=key)
-        return None if is_none(value) else decompress(value)
-
-    def put(self, kind: str, uuid: UUID, value: bytes) -> Key:
-        """put stores value into map for given kind, uuid and time"""
-        return self._put(
-            key=Key(kind=kind, uuid=uuid4(), time=now()),
-            value=EMPTY if is_none(value) else compress(value)
-        )
+    def exists(self, uuid: UUID, time: Optional[int] = None) -> bool:
+        """exists returns True if the key has a value besides None or empty bytes in the Map"""
+        return self.read(uuid=uuid, time=get_or_now(time)) is not None
 
     def create(self, kind: str, value: bytes) -> Key:
         """create a new uuid for the kind and value"""
-        return self.put(kind=kind, uuid=uuid4(), value=value)
+        return self.update(uuid=uuid4(), kind=kind, value=value)
 
-    def delete(self, kind: str, uuid: UUID) -> Key:
-        """delete the key but adding an empty byte value. all other values of the key are retained."""
-        return self.put(kind=kind, uuid=uuid, value=EMPTY)
-
-    def exists(self, kind: str, uuid: UUID, time: int = now()) -> bool:
-        """exists returns True if the key has a value besides None or empty bytes in the Map"""
-        return not is_none(self.get(key=Key(kind=kind, uuid=uuid, time=time)))
-
-    def read(self, kind: str, uuid: UUID, time: int = now()) -> Optional[bytes]:
+    def read(self, uuid: UUID, time: Optional[int] = None) -> Optional[bytes]:
         """read returns the latest value that was valid at the time specified otherwise None"""
-        return self.get(key=Key(kind=kind, uuid=uuid, time=time))
+        value = self._get(uuid=uuid, time=get_or_now(time))
+        return None if is_none(value) else decompress(value)
 
-    def update(self, kind: str, uuid: UUID, value: bytes) -> Key:
-        """update stores value into map for given kind and uuid"""
-        return self.put(kind=kind, uuid=uuid, value=value)
+    def update(self, uuid: UUID, kind: str, value: bytes) -> Key:
+        """update stores value into map for given kind, uuid and time"""
+        return self._put(
+            key=Key(kind=kind, uuid=uuid, time=now()),
+            value=EMPTY if is_none(value) else compress(value)
+        )
+
+    def delete(self, uuid: UUID) -> Key:
+        """delete the key but adding an empty byte kind and value"""
+        return self.update(uuid=uuid, kind=EMPTY, value=EMPTY)
 
 
 class Queue(Context):
@@ -165,3 +159,19 @@ class Queue(Context):
             return self.pop()
         except Exception as e:
             raise StopIteration(str(e))
+
+class Pickle(object):
+    _key: Key = None
+
+    def save(self, db: Map):
+        value = pickle.dumps(obj=self)
+        if self._key is None:
+            self._key = db.create(kind=self.__class__.__name__, value=value)
+        else:
+            self._key = db.update(uuid=key.uuid, kind=key.kind, value=value)
+        return self
+    
+    def read(self, db: Map):
+        if self._key is None:
+            throw ValueError('_key must not be None')
+        return pickle.loads(s=db.read(uuid=self._key.uuid))

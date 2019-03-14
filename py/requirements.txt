@@ -3,6 +3,6 @@ google-cloud-bigtable>=0.32
 google-cloud-storage>=1.14
 lmdb>=0.94
 mysqlclient>=1.4
-psycopg2>=2.7
+psycopg2-binary>=2.7
 pymemcache>=2.1
 redis>=3.2

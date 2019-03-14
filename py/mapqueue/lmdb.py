@@ -1,5 +1,5 @@
 import lmdb
-from .base import Key, key_bytes, Map, Optional
+from .base import Key, int_bytes, key_bytes, Map, Optional, UUID
 
 PATH = './'
 
@@ -19,8 +19,8 @@ class LMDBMap(Map):
         )
         return key
 
-    def _get(self, key: Key) -> Optional[bytes]:
-        self._cursor.set_range(key_bytes(key))
+    def _get(self, uuid: UUID, time: int) -> Optional[bytes]:
+        self._cursor.set_range(uuid.bytes_le + int_bytes(-time))
         return self._cursor.value()
 
     def close(self):

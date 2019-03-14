@@ -1,8 +1,9 @@
-from .base import Key, Map, Optional, millis_dt
+from .base import Key, Map, Optional, millis_dt, UUID
 from google.cloud.bigtable.client import Client
 from google.cloud.bigtable.row_filters import CellsColumnLimitFilter, TimestampRangeFilter, TimestampRange, RowFilterChain
 
 FAMILY = 'f'
+COLUMN = b'c'
 
 
 class BigTableMap(Map):
@@ -33,21 +34,21 @@ class BigTableMap(Map):
         row = self._table.row(row_key=key.uuid.bytes_le)
         row.set_cell(
             column_family_id=FAMILY,
-            column=key.kind.encode('utf-8'),
+            column=COLUMN,
             value=value,
             timestamp=millis_dt(key.time)
         )
         self._table.mutate_rows([row])
         return key
 
-    def _get(self, key: Key) -> Optional[bytes]:
+    def _get(self, uuid: UUID, time: int) -> Optional[bytes]:
         return self._table.read_row(
-            row_key=key.uuid.bytes_le,
+            row_key=uuid.bytes_le,
             filter_=RowFilterChain(
                 filters=[
                     TimestampRangeFilter(range_=TimestampRange(
-                        end=millis_dt(key.time+1))),
+                        end=millis_dt(time+1))),
                     CellsColumnLimitFilter(num_cells=1)
                 ]
             )
-        ).cell_value(column_family_id=FAMILY, column=key.kind.encode('utf-8'))
+        ).cell_value(column_family_id=FAMILY, column=COLUMN)

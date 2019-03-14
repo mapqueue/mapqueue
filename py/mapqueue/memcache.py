@@ -1,5 +1,5 @@
 import lmdb
-from .base import Key, key_bytes, Map, Optional
+from .base import Key, key_bytes, Map, Optional, UUID
 from pymemcache.client.hash import HashClient
 
 
@@ -13,7 +13,7 @@ class MemcacheMap(Map):
         self._db.set(key_bytes(key), value)
         return key
 
-    def _get(self, key: Key) -> Optional[bytes]:
+    def _get(self, uuid: UUID, time: int) -> Optional[bytes]:
         return self._db.get(key_bytes(key))
 
     def close(self):

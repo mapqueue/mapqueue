@@ -3,10 +3,16 @@ from time import sleep
 from uuid import uuid4
 from zlib import compress
 from mapqueue.base import EMPTY, Key, now
-from mapqueue.config import gcp
+from mapqueue.config import aws, gcp
 from mapqueue.bigtable import BigTableMap
-from mapqueue.local import LocalMap, LocalQueue
+from mapqueue.dynamodb import DynamoMap
 from mapqueue.lmdb import LMDBMap
+from mapqueue.local import LocalMap, LocalQueue
+from mapqueue.memcache import MemcacheMap
+from mapqueue.mysql import MySQLMap
+from mapqueue.postgres import PostgreSQLMap
+from mapqueue.redis import RedisMap
+from mapqueue.s3 import S3Map
 from mapqueue.sqlite import SQLiteMap
 
 TEN = 10000
@@ -18,21 +24,18 @@ os.environ['BIGTABLE_EMULATOR_HOST'] = 'localhost:9035'
 def test_map(m):
     NOW = now()
     with m as db:
-        hello = db.create(kind='hello', value=b'now')
+        hello = db._put(key=Key(kind='hello', uuid=uuid4(), time=NOW), value=compress(b'now'))
         db._put(key=Key(kind='hello', uuid=hello.uuid, time=NOW-TEN), value=compress(b'past'))
         db._put(key=Key(kind='hello', uuid=hello.uuid, time=NOW+TEN), value=compress(b'future'))
-        world = db.create(kind='world', value=b'world')
-        deleted = db.create(kind='deleted', value=b'deleted')
-        db.delete(kind=deleted.kind, uuid=deleted.uuid)
-        assert db.exists(kind=hello.kind, uuid=hello.uuid, time=NOW)
-        assert db.get(key=Key(kind=hello.kind, uuid=hello.uuid, time=NOW)) == b'now'
-        assert db.read(kind=hello.kind, uuid=hello.uuid, time=NOW) == b'now'
-        assert db.exists(kind=world.kind, uuid=world.uuid, time=NOW)
-        assert db.get(key=Key(kind=world.kind, uuid=world.uuid, time=NOW)) == b'world'
-        assert db.read(kind=world.kind, uuid=world.uuid, time=NOW) == b'world'
-        assert not db.exists(kind=deleted.kind, uuid=deleted.uuid, time=NOW)
-        assert db.get(key=Key(kind=deleted.kind, uuid=deleted.uuid, time=NOW)) is None
-        assert db.read(kind=deleted.kind, uuid=deleted.uuid, time=NOW) is None
+        world = db._put(key=Key(kind='world', uuid=uuid4(), time=NOW), value=compress(b'world'))
+        deleted = db._put(key=Key(kind='deleted', uuid=uuid4(), time=NOW-TEN), value=compress(b'deleted'))
+        db._put(key=Key(kind='deleted', uuid=deleted.uuid, time=NOW), value=EMPTY)
+        assert db.exists(uuid=hello.uuid, time=NOW)
+        assert db.read(uuid=hello.uuid, time=NOW) == b'now'
+        assert db.exists(uuid=world.uuid, time=NOW)
+        assert db.read(uuid=world.uuid, time=NOW) == b'world'
+        assert not db.exists(uuid=deleted.uuid, time=NOW)
+        assert db.read(uuid=deleted.uuid, time=NOW) is None
     db = m.open()
     hello = db._put(key=Key(kind='hello', uuid=uuid4(), time=NOW), value=compress(b'now'))
     db._put(key=Key(kind='hello', uuid=hello.uuid, time=NOW-TEN), value=compress(b'past'))
@@ -40,15 +43,12 @@ def test_map(m):
     world = db._put(key=Key(kind='world', uuid=uuid4(), time=NOW), value=compress(b'world'))
     deleted = db._put(key=Key(kind='deleted', uuid=uuid4(), time=NOW-TEN), value=compress(b'deleted'))
     db._put(key=Key(kind='deleted', uuid=deleted.uuid, time=NOW), value=EMPTY)
-    assert db.exists(kind=hello.kind, uuid=hello.uuid, time=NOW)
-    assert db.get(key=Key(kind=hello.kind, uuid=hello.uuid, time=NOW)) == b'now'
-    assert db.read(kind=hello.kind, uuid=hello.uuid, time=NOW) == b'now'
-    assert db.exists(kind=world.kind, uuid=world.uuid, time=NOW)
-    assert db.get(key=Key(kind=world.kind, uuid=world.uuid, time=NOW)) == b'world'
-    assert db.read(kind=world.kind, uuid=world.uuid, time=NOW) == b'world'
-    assert not db.exists(kind=deleted.kind, uuid=deleted.uuid, time=NOW)
-    assert db.get(key=Key(kind=deleted.kind, uuid=deleted.uuid, time=NOW)) is None
-    assert db.read(kind=deleted.kind, uuid=deleted.uuid, time=NOW) is None
+    assert db.exists(uuid=hello.uuid, time=NOW)
+    assert db.read(uuid=hello.uuid, time=NOW) == b'now'
+    assert db.exists(uuid=world.uuid, time=NOW)
+    assert db.read(uuid=world.uuid, time=NOW) == b'world'
+    assert not db.exists(uuid=deleted.uuid, time=NOW)
+    assert db.read(uuid=deleted.uuid, time=NOW) is None
     db.close()
 
 def test_queue(q):
@@ -75,8 +75,14 @@ def test_queue(q):
     queue.close()
 
 if __name__ == "__main__":
-    test_map(BigTableMap(config=gcp(keys='./keys/gcp.json')))
-    test_map(LocalMap())
+    # test_map(BigTableMap(config=gcp(keys='./keys/gcp.json')))
+    # test_map(DynamoMap(config=aws(test=True)))
     test_map(LMDBMap())
+    test_map(LocalMap())
+    # test_map(MemcacheMap())
+    # test_map(MySQLMap())
+    # test_map(PostgreSQLMap())
+    # test_map(RedisMap())
+    # test_map(S3Map(config=aws(test=True)))
     test_map(SQLiteMap())
     test_queue(LocalQueue())

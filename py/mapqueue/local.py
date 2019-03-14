@@ -1,4 +1,4 @@
-from .base import namedtuple, Key, Map, Queue, Optional
+from .base import namedtuple, Key, Map, Queue, Optional, UUID
 from bisect import bisect_left
 from collections import deque
 
@@ -15,13 +15,13 @@ class LocalMap(Map):
         self._map = {}
         return self
 
-    def _get(self, key: Key) -> Optional[bytes]:
-        uuid = key.uuid.bytes_le
+    def _get(self, uuid: UUID, time: int) -> Optional[bytes]:
+        uuid = uuid.bytes_le
         if uuid not in self._map.keys():
             return None
         else:
             revisions = self._map[uuid]
-            i = bisect_left(revisions.times, -key.time)
+            i = bisect_left(revisions.times, -time)
             return revisions.values[i]
 
     def _put(self, key: Key, value: bytes) -> Key:
