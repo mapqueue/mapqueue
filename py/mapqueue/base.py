@@ -152,6 +152,7 @@ class Queue(Context):
         raise NotImplementedError('add must append a value to the queue')
 
     def pop(self) -> bytes:
+        """returns a value from the queue"""
         raise NotImplementedError('pop must return a value from the queue')
 
     def __iter__(self):
